@@ -1,0 +1,26 @@
+# Ignore Airflow-related files and folders
+# Airflow dags, configs, and runtime folders
+
+airflow/
+dags/
+tests/
+**/airflow*
+**/dags*
+README.md
+# Airflow DB and logs
+*.db
+*.log
+# Airflow in Docker
+**/airflow/
+# Airflow in src (if any)
+**/src/spark_consolidate_daily.py
+# Airflow in requirements (if any)
+requirements-airflow.txt
+# VSCode settings
+.vscode/
+# Python cache
+__pycache__/
+*.pyc
+# Output and checkpoint (optional, keep if needed)
+output/
+checkpoint/

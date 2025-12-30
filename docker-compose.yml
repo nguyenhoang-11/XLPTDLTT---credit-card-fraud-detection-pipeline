@@ -1,0 +1,123 @@
+services:
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    environment:
+      CLUSTER_NAME: credit
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      HDFS_CONF_dfs_replication: 1
+    ports:
+      - "9870:9870" # NameNode UI
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      HDFS_CONF_dfs_replication: 1
+      SERVICE_PRECONDITION: "namenode:9870"
+    depends_on:
+      - namenode
+    ports:
+      - "9864:9864" # DataNode UI
+    volumes:
+      - hadoop_datanode:/hadoop/dfs/data
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zk
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+  producer:
+    build: .
+    container_name: credit-producer
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BROKER: kafka:9092
+    volumes:
+      - ./data:/app/data
+    command: ["-m", "src.kafka_producer"]
+
+  consumer:
+    build: .
+    container_name: credit-consumer
+    depends_on:
+      - kafka
+      - namenode
+      - datanode
+      - producer
+    environment:
+      KAFKA_BROKER: kafka:9092
+      FS_DEFAULTFS: hdfs://namenode:9000
+      OUTPUT_URI: hdfs://namenode:9000/user/credit-pipeline/output
+      CHECKPOINT_URI: hdfs://namenode:9000/user/credit-pipeline/checkpoint
+      NAMENODE_HOST: namenode
+      NAMENODE_PORT: 9870
+    volumes:
+      - ./output:/app/output
+      - ./checkpoint:/app/checkpoint
+    command: ["-m", "src.spark_streaming_consumer"]
+
+  hdfs-init:
+    image: bde2020/hadoop-base:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-init
+    depends_on:
+      - namenode
+      - datanode
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      SERVICE_PRECONDITION: "namenode:9870 datanode:9864"
+    command: ["bash", "-lc", "hdfs dfs -mkdir -p /user/credit-pipeline/output /user/credit-pipeline/checkpoint /user/credit-pipeline/consolidated"]
+
+  # airflow:
+  #   image: apache/airflow:2.7.3-python3.11
+  #   container_name: airflow
+  #   depends_on:
+  #     - namenode
+  #     - datanode
+  #   environment:
+  #     AIRFLOW__CORE__DAGS_FOLDER: /app/dags
+  #     AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+  #     AIRFLOW__CORE__LOAD_DEFAULT_CONNECTIONS: "False"
+  #     AIRFLOW__CORE__UNIT_TEST_MODE: "False"
+  #     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////app/airflow/airflow.db
+  #     AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+  #     AIRFLOW_HOME: /app/airflow
+  #     FS_DEFAULTFS: hdfs://namenode:9000
+  #     OUTPUT_URI: hdfs://namenode:9000/user/credit-pipeline/output
+  #     CONSOLIDATED_URI: hdfs://namenode:9000/user/credit-pipeline/consolidated
+  #   volumes:
+  #     - ./dags:/app/dags
+  #     - ./src:/app/src
+  #     - ./airflow:/app/airflow
+  #   ports:
+  #     - "8080:8080"
+  #   entrypoint: /bin/bash
+  #   command: -c "pip install pyspark==4.1.0 requests beautifulsoup4 2>/dev/null; airflow db init && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com 2>/dev/null; airflow webserver --port 8080 & airflow scheduler"
+
+volumes:
+  hadoop_namenode: {}
+  hadoop_datanode: {}
