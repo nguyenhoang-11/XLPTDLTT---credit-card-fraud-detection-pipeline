@@ -18,28 +18,20 @@ CSV_FILE_PATH = BASE_DIR / "data" / "User0_credit_card_transactions.csv"
 
 def create_producer():
     """Create a Kafka producer with JSON serialization."""
-    max_retries = 20
-    wait_seconds = 10
-    for attempt in range(1, max_retries + 1):
-        try:
-            print(f"[Producer] Attempt {attempt}/{max_retries} - Trying to connect to Kafka broker at {KAFKA_BROKER}...")
-            producer = KafkaProducer(
-                bootstrap_servers=KAFKA_BROKER,
-                value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-                key_serializer=lambda v: json.dumps(v).encode("utf-8") if v else None,
-                acks="all",
-                retries=3,
-            )
-            print(f"[Producer] Connected to Kafka broker: {KAFKA_BROKER}")
-            return producer
-        except Exception as exc:
-                print(f"[Producer] Attempt {attempt}/{max_retries} - Failed to connect to Kafka: {exc}")
-            if attempt < max_retries:
-                print(f"[Producer] Waiting {wait_seconds} seconds before retrying...")
-                time.sleep(wait_seconds)
-            else:
-                print("[Producer] Exceeded maximum retry attempts. Exiting.")
-                return None
+    try:
+        print(f"[Producer] Trying to connect to Kafka broker at {KAFKA_BROKER}...")
+        producer = KafkaProducer(
+            bootstrap_servers=KAFKA_BROKER,
+            value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+            key_serializer=lambda v: json.dumps(v).encode("utf-8") if v else None,
+            acks="all",
+            retries=3,
+        )
+        print(f"[Producer] Connected to Kafka broker: {KAFKA_BROKER}")
+        return producer
+    except Exception as exc:
+        print(f"[Producer] Failed to connect to Kafka: {exc}")
+        return None
 
 
 def read_and_send_csv(producer: KafkaProducer) -> None:
