@@ -1,26 +1,78 @@
-# Ignore Airflow-related files and folders
-# Airflow dags, configs, and runtime folders
+# ========================================
+# SENSITIVE FILES - DO NOT COMMIT
+# ========================================
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+credentials.json
 
-airflow/
-dags/
-tests/
-**/airflow*
-**/dags*
-README.md
-# Airflow DB and logs
-*.db
-*.log
-# Airflow in Docker
-**/airflow/
-# Airflow in src (if any)
-**/src/spark_consolidate_daily.py
-# Airflow in requirements (if any)
-requirements-airflow.txt
-# VSCode settings
-.vscode/
-# Python cache
+# ========================================
+# PYTHON
+# ========================================
 __pycache__/
-*.pyc
-# Output and checkpoint (optional, keep if needed)
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ========================================
+# AIRFLOW RUNTIME
+# ========================================
+airflow/airflow.db
+airflow/logs/
+airflow/airflow-webserver.pid
+airflow/unittests.cfg
+airflow/*.log
+
+# ========================================
+# DATA & OUTPUT
+# ========================================
 output/
 checkpoint/
+powerbi_exports/*.csv
+powerbi_exports/*.txt
+powerbi_exports_archive/
+
+# Keep directory structure
+!powerbi_exports/.gitkeep
+!output/.gitkeep
+!checkpoint/.gitkeep
+
+# ========================================
+# DOCKER & VOLUMES
+# ========================================
+*.log
+*.pid
+
+# ========================================
+# IDE
+# ========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ========================================
+# OS
+# ========================================
+Thumbs.db
+desktop.ini

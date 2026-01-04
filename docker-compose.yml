@@ -53,6 +53,7 @@ services:
   producer:
     build: .
     container_name: credit-producer
+    restart: unless-stopped
     depends_on:
       - kafka
     environment:
@@ -64,6 +65,7 @@ services:
   consumer:
     build: .
     container_name: credit-consumer
+    restart: unless-stopped
     depends_on:
       - kafka
       - namenode
@@ -92,31 +94,43 @@ services:
       SERVICE_PRECONDITION: "namenode:9870 datanode:9864"
     command: ["bash", "-lc", "hdfs dfs -mkdir -p /user/credit-pipeline/output /user/credit-pipeline/checkpoint /user/credit-pipeline/consolidated"]
 
-  # airflow:
-  #   image: apache/airflow:2.7.3-python3.11
-  #   container_name: airflow
-  #   depends_on:
-  #     - namenode
-  #     - datanode
-  #   environment:
-  #     AIRFLOW__CORE__DAGS_FOLDER: /app/dags
-  #     AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-  #     AIRFLOW__CORE__LOAD_DEFAULT_CONNECTIONS: "False"
-  #     AIRFLOW__CORE__UNIT_TEST_MODE: "False"
-  #     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////app/airflow/airflow.db
-  #     AIRFLOW__CORE__EXECUTOR: SequentialExecutor
-  #     AIRFLOW_HOME: /app/airflow
-  #     FS_DEFAULTFS: hdfs://namenode:9000
-  #     OUTPUT_URI: hdfs://namenode:9000/user/credit-pipeline/output
-  #     CONSOLIDATED_URI: hdfs://namenode:9000/user/credit-pipeline/consolidated
-  #   volumes:
-  #     - ./dags:/app/dags
-  #     - ./src:/app/src
-  #     - ./airflow:/app/airflow
-  #   ports:
-  #     - "8080:8080"
-  #   entrypoint: /bin/bash
-  #   command: -c "pip install pyspark==4.1.0 requests beautifulsoup4 2>/dev/null; airflow db init && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com 2>/dev/null; airflow webserver --port 8080 & airflow scheduler"
+  airflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: airflow
+    depends_on:
+      - namenode
+      - datanode
+    environment:
+      AIRFLOW__CORE__DAGS_FOLDER: /app/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__LOAD_DEFAULT_CONNECTIONS: "False"
+      AIRFLOW__CORE__UNIT_TEST_MODE: "False"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////app/airflow/airflow.db
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW_HOME: /app/airflow
+      FS_DEFAULTFS: hdfs://namenode:9000
+      TRANSACTIONS_PATH: hdfs://namenode:9000/user/credit-pipeline/output/transactions
+      OUTPUT_URI: hdfs://namenode:9000/user/credit-pipeline/output
+      CONSOLIDATED_URI: hdfs://namenode:9000/user/credit-pipeline/consolidated
+      PYTHONPATH: /app
+      POWERBI_TENANT_ID: ${POWERBI_TENANT_ID:-}
+      POWERBI_CLIENT_ID: ${POWERBI_CLIENT_ID:-}
+      POWERBI_CLIENT_SECRET: ${POWERBI_CLIENT_SECRET:-}
+      POWERBI_WORKSPACE_ID: ${POWERBI_WORKSPACE_ID:-}
+      POWERBI_EXPORT_DIR: /app/powerbi_exports
+      POWERBI_STREAMING_URL: ${POWERBI_STREAMING_URL:-}
+    volumes:
+      - ./dags:/app/dags
+      - ./src:/app/src
+      - ./airflow:/app/airflow
+      - ./powerbi_exports:/app/powerbi_exports
+      - ./powerbi_exports_archive:/app/powerbi_exports_archive
+    ports:
+      - "8080:8080"
+    entrypoint: /bin/bash
+    command: -c "pip install pyspark==3.5.1 requests beautifulsoup4 lxml selenium webdriver-manager pandas 2>/dev/null; airflow db init && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com 2>/dev/null; airflow webserver --port 8080 & airflow scheduler"
 
 volumes:
   hadoop_namenode: {}

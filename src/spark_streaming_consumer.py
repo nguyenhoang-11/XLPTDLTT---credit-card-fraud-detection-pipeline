@@ -1,3 +1,4 @@
+
 """Spark Structured Streaming consumer for credit card transactions."""
 from datetime import datetime
 from pathlib import Path
@@ -184,9 +185,24 @@ def process_stream(spark: SparkSession):
         .otherwise("LOW_VALUE"),
     )
 
-    df_filtered = df_categorized.filter((col("Errors?").isNull()) | (col("Errors?") == ""))
+    # Filter out transactions with errors OR fraud (as per requirements)
+    # "Is Fraud = Yes xác định lỗi và giao dịch này xem như không thành công, không cần xử lý tiếp"
+    df_filtered = df_categorized.filter(
+        ((col("Errors?").isNull()) | (col("Errors?") == "")) &
+        ((col("Is Fraud?") == "No") | (col("Is Fraud?").isNull()))
+    )
 
-    df_final = df_filtered.withColumn("processed_at", current_timestamp()).withColumn("processing_date", current_date())
+    # Add watermark for deduplication (allow 24 hours late data to handle loop mode)
+    df_watermarked = df_filtered.withWatermark("transaction_datetime", "24 hours")
+
+    # Remove duplicates based on unique transaction key within watermark window
+    # A transaction is unique by: transaction_datetime + User + Card + Amount_USD
+    # Using dropDuplicatesWithinWatermark to maintain state efficiently
+    df_deduplicated = df_watermarked.dropDuplicates([
+        "transaction_datetime", "User", "Card", "Amount_USD"
+    ])
+
+    df_final = df_deduplicated.withColumn("processed_at", current_timestamp()).withColumn("processing_date", current_date())
 
     df_output = df_final.select(
         "User",

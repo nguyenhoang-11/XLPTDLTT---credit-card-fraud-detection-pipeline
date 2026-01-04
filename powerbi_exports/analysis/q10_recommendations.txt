@@ -1,0 +1,57 @@
+
+PHÂN TÍCH VÀ ĐỀ XUẤT CẢI TIẾN HỆ THỐNG
+
+Dựa trên phân tích 9 câu hỏi trên, các đề xuất sau được khuyến nghị:
+
+1. THEO DÕI FRAUD RIÊNG BIỆT
+   - Vấn đề: Hiện tại fraud transactions bị filter và mất dữ liệu
+   - Giải pháp: Tạo streaming sink riêng để lưu fraud records
+   - Lợi ích: Phân tích pattern, train ML model detect fraud
+
+2. GIÁM SÁT THỜI GIAN THỰC
+   - Cảnh báo giao dịch bất thường (giá trị cao, tần suất cao)
+   - Alert khi user có >3 giao dịch trong 5 phút
+   - Dashboard real-time cho fraud team
+
+3. TỐI ƯU XỬ LÝ THEO GIỜ CAO ĐIỂM
+   - Scale Kafka partitions theo traffic pattern
+   - Tăng Spark executors trong giờ cao điểm
+   - Cache exchange rate để giảm API calls
+
+4. PHÂN TÍCH ĐỊA LÝ
+   - Xây dựng risk score theo city/merchant
+   - Merchants có fraud rate cao cần verify thêm
+   - Geo-fencing: cảnh báo giao dịch ở vị trí lạ
+
+5. MACHINE LEARNING
+   - Train model dự đoán fraud dựa trên:
+     + Thời gian giao dịch
+     + Vị trí bất thường
+     + Giá trị giao dịch
+     + Tần suất giao dịch
+   - Integration với Spark MLlib
+
+6. DATA QUALITY
+   - Validate merchant data quality
+   - Chuẩn hóa city names (La Verne, LA VERNE, etc.)
+   - Enrich với external data (population, GDP)
+
+7. PERFORMANCE OPTIMIZATION
+   - Partition data theo processing_date
+   - Compress old data
+   - Archive transactions >1 year
+
+8. COMPLIANCE & SECURITY
+   - Encrypt sensitive fields (Card number)
+   - Audit log cho mọi thay đổi
+   - GDPR compliance cho user data
+
+9. AIRFLOW AUTOMATION
+   - Daily aggregation jobs
+   - Auto-refresh Power BI datasets
+   - Health check và alert
+
+10. USER EXPERIENCE
+    - Near real-time notifications cho users
+    - Spending insights & budgeting
+    - Fraud prevention tips

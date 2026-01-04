@@ -34,47 +34,81 @@ def create_producer():
         return None
 
 
-def read_and_send_csv(producer: KafkaProducer) -> None:
-    """Read the CSV row by row and send each record to Kafka with a random delay."""
+def read_and_send_csv(producer: KafkaProducer, loop_mode: bool = True) -> None:
+    """Read the CSV row by row and send each record to Kafka with a random delay.
+
+    Args:
+        producer: Kafka producer instance
+        loop_mode: If True, continuously loop through CSV file. If False, run once and stop.
+    """
     try:
         if not CSV_FILE_PATH.exists():
             print(f"Error: CSV file not found: {CSV_FILE_PATH}")
             return
-        
-        with CSV_FILE_PATH.open("r", encoding="utf-8") as file:
-            csv_reader = csv.DictReader(file)
-            if not csv_reader:
-                print("Error: CSV file is empty or invalid")
-                return
-            
-            count = 0
 
-            for row in csv_reader:
-                row["processing_timestamp"] = datetime.now().isoformat()
-                row["record_id"] = count
+        count = 0
+        loop_iteration = 0
 
-                key = str(row.get("User", "0"))
+        while True:
+            loop_iteration += 1
+            print(f"\n{'='*60}")
+            print(f"[Producer] Starting loop iteration #{loop_iteration}")
+            print(f"{'='*60}\n")
 
-                future = producer.send(
-                    TOPIC_NAME,
-                    key=key,
-                    value=row,
-                )
+            with CSV_FILE_PATH.open("r", encoding="utf-8") as file:
+                csv_reader = csv.DictReader(file)
+                if not csv_reader:
+                    print("Error: CSV file is empty or invalid")
+                    return
 
-                try:
-                    record_metadata = future.get(timeout=10)
-                except Exception as send_exc:
-                    print(f"Failed to send record #{count}: {send_exc}")
-                    continue
+                for row in csv_reader:
+                    # Update timestamp to NOW to simulate real-time and enable deduplication
+                    row["processing_timestamp"] = datetime.now().isoformat()
+                    row["record_id"] = count
 
-                count += 1
+                    # For loop mode: Update transaction date/time to current time
+                    # This prevents duplicates and makes data appear as real-time
+                    if loop_iteration > 1:
+                        now = datetime.now()
+                        row["Year"] = str(now.year)
+                        row["Month"] = str(now.month)
+                        row["Day"] = str(now.day)
+                        row["Time"] = now.strftime("%H:%M")
 
-                print(
-                    f"Record #{count} | Partition: {record_metadata.partition} | Offset: {record_metadata.offset} | "
-                    f"User: {row['User']} | Amount: {row['Amount']} | Fraud: {row['Is Fraud?']}"
-                )
+                    key = str(row.get("User", "0"))
 
-                time.sleep(random.uniform(1, 5))
+                    future = producer.send(
+                        TOPIC_NAME,
+                        key=key,
+                        value=row,
+                    )
+
+                    try:
+                        record_metadata = future.get(timeout=10)
+                    except Exception as send_exc:
+                        print(f"Failed to send record #{count}: {send_exc}")
+                        continue
+
+                    count += 1
+
+                    print(
+                        f"Record #{count} | Partition: {record_metadata.partition} | Offset: {record_metadata.offset} | "
+                        f"User: {row['User']} | Amount: {row['Amount']} | Fraud: {row['Is Fraud?']}"
+                    )
+
+                    # Random delay 0.5-2s to simulate real-time transaction stream
+                    time.sleep(random.uniform(0.5, 2))
+
+            print(f"\n[Producer] Completed loop iteration #{loop_iteration}. Total records sent: {count}")
+
+            # If loop_mode is False, break after first iteration
+            if not loop_mode:
+                print("[Producer] Loop mode disabled. Stopping after one iteration.")
+                break
+
+            # Small delay before restarting loop
+            print(f"[Producer] Restarting from beginning in 5 seconds...\n")
+            time.sleep(5)
 
     except FileNotFoundError:
         print(f"CSV file not found: {CSV_FILE_PATH}")
