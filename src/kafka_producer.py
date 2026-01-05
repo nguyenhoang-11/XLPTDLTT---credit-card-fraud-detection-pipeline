@@ -97,7 +97,7 @@ def read_and_send_csv(producer: KafkaProducer, loop_mode: bool = True) -> None:
                     )
 
                     # Random delay 0.5-2s to simulate real-time transaction stream
-                    time.sleep(random.uniform(0.5, 2))
+                    time.sleep(random.uniform(1, 5))
 
             print(f"\n[Producer] Completed loop iteration #{loop_iteration}. Total records sent: {count}")
 
