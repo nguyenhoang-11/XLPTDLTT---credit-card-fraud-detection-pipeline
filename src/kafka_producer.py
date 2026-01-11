@@ -96,7 +96,7 @@ def read_and_send_csv(producer: KafkaProducer, loop_mode: bool = True) -> None:
                         f"User: {row['User']} | Amount: {row['Amount']} | Fraud: {row['Is Fraud?']}"
                     )
 
-                    # Random delay 0.5-2s to simulate real-time transaction stream
+                    # Random delay 1-5s to simulate real-time transaction stream
                     time.sleep(random.uniform(1, 5))
 
             print(f"\n[Producer] Completed loop iteration #{loop_iteration}. Total records sent: {count}")
@@ -125,7 +125,7 @@ def main():
     producer = create_producer()
 
     if producer:
-        read_and_send_csv(producer)
+        read_and_send_csv(producer, loop_mode=False)  # Disable loop to prevent duplicates
     else:
         print("Unable to start producer. Please verify the Kafka server.")
 

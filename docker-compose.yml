@@ -53,7 +53,7 @@ services:
   producer:
     build: .
     container_name: credit-producer
-    restart: unless-stopped
+    restart: unless-stopped  # Auto restart - but will stop after loop_mode=False completes
     depends_on:
       - kafka
     environment:

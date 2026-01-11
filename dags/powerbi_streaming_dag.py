@@ -25,7 +25,7 @@ dag = DAG(
     'powerbi_streaming_upload',
     default_args=default_args,
     description='Push data to Power BI Streaming Dataset',
-    schedule_interval='*/5 * * * *',  # Run every 5 minutes
+    schedule_interval='*/2 * * * *',  # Run every 2 minutes for demo
     catchup=False,
     tags=['powerbi', 'streaming'],
 )
@@ -56,18 +56,21 @@ def export_and_push(**context):
         df = spark.read.csv(hdfs_path, header=True, inferSchema=True)
 
         # Track last processed timestamp to avoid duplicates
+        # Using processed_at (Spark's timestamp) instead of transaction_datetime (CSV has old 2003 dates)
         tracking_file = "/app/powerbi_exports/last_push_timestamp.txt"
         last_timestamp = None
 
         if os.path.exists(tracking_file):
             with open(tracking_file, 'r') as f:
                 last_timestamp = f.read().strip()
-            print(f"Last push timestamp: {last_timestamp}")
-            # Only get new records since last push
-            df = df.filter(col('transaction_datetime') > last_timestamp)
+            print(f"Last push timestamp (processed_at): {last_timestamp}")
+            # Only get new records since last push - filter by processed_at
+            df = df.filter(col('processed_at') > last_timestamp)
+        else:
+            print("No tracking file found - this is the first push")
 
         total = df.count()
-        print(f"New records to push: {total:,}")
+        print(f"Total NEW records to push: {total:,}")
 
         if total == 0:
             print("No new data to push. Skipping...")
@@ -107,13 +110,14 @@ def export_and_push(**context):
 
         print(f"Total rows in CSV: {len(df_pd):,}")
 
-        # Select 15 most important columns for 10 research questions
+        # Select 19 columns including helper columns for analysis (replaces DAX)
         columns_to_select = [
             'transaction_datetime', 'Amount_USD', 'Amount_VND',
             'Merchant Name', 'Merchant City', 'Merchant State',
             'MCC', 'Is Fraud?', 'transaction_type',
             'day_of_week', 'transaction_year', 'transaction_month', 'transaction_hour',
-            'User', 'Card'
+            'User', 'Card',
+            'is_high_value', 'is_fraud_flag', 'is_weekday', 'is_weekend'
         ]
         df_filtered = df_pd[columns_to_select].copy()
 
@@ -123,10 +127,11 @@ def export_and_push(**context):
             'Merchant_Name', 'Merchant_City', 'Merchant_State',
             'MCC', 'Is_Fraud', 'transaction_type',
             'day_of_week', 'transaction_year', 'transaction_month', 'transaction_hour',
-            'User', 'Card'
+            'User', 'Card',
+            'is_high_value', 'is_fraud_flag', 'is_weekday', 'is_weekend'
         ]
 
-        print(f"Pushing {len(df_filtered):,} rows with 15 columns to Power BI...")
+        print(f"Pushing {len(df_filtered):,} rows with 19 columns to Power BI...")
 
         # Replace NaN, Inf, -Inf with None (null in JSON)
         df_filtered = df_filtered.replace([np.nan, np.inf, -np.inf], None)
@@ -134,11 +139,18 @@ def export_and_push(**context):
         # Convert to list of dicts
         rows = df_filtered.to_dict('records')
 
-        # Fix timestamp format for Power BI
+        # Fix timestamp format for Power BI (ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ)
         for row in rows:
-            if 'timestamp' in row and isinstance(row['timestamp'], str):
-                if 'T' not in row['timestamp']:
-                    row['timestamp'] = row['timestamp'].replace(' ', 'T') + '.000Z'
+            if 'transaction_datetime' in row and row['transaction_datetime'] is not None:
+                # Convert to string if it's a pandas Timestamp
+                if hasattr(row['transaction_datetime'], 'isoformat'):
+                    row['transaction_datetime'] = row['transaction_datetime'].isoformat() + 'Z'
+                elif isinstance(row['transaction_datetime'], str):
+                    # If already string, ensure ISO 8601 format
+                    if 'T' not in row['transaction_datetime']:
+                        row['transaction_datetime'] = row['transaction_datetime'].replace(' ', 'T') + 'Z'
+                    elif not row['transaction_datetime'].endswith('Z'):
+                        row['transaction_datetime'] = row['transaction_datetime'] + 'Z'
 
         # Push in batches of 1000
         batch_size = 1000
@@ -161,11 +173,11 @@ def export_and_push(**context):
 
         print(f"\nSUCCESS: Pushed {len(rows):,} rows to Power BI Streaming Dataset")
 
-        # Update last processed timestamp
-        max_timestamp = df_filtered['transaction_datetime'].max()
+        # Update last processed timestamp - use processed_at from Spark
+        max_timestamp = df_pd['processed_at'].max()
         with open(tracking_file, 'w') as f:
             f.write(str(max_timestamp))
-        print(f"Updated tracking file with timestamp: {max_timestamp}")
+        print(f"Updated tracking file with processed_at timestamp: {max_timestamp}")
 
         return f"Pushed {len(rows):,} rows"
 

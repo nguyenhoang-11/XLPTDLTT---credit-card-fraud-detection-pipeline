@@ -185,24 +185,23 @@ def process_stream(spark: SparkSession):
         .otherwise("LOW_VALUE"),
     )
 
-    # Filter out transactions with errors OR fraud (as per requirements)
-    # "Is Fraud = Yes xác định lỗi và giao dịch này xem như không thành công, không cần xử lý tiếp"
-    df_filtered = df_categorized.filter(
-        ((col("Errors?").isNull()) | (col("Errors?") == "")) &
-        ((col("Is Fraud?") == "No") | (col("Is Fraud?").isNull()))
+    # Add helper columns for Power BI analysis (replace DAX calculations)
+    df_with_helpers = df_categorized\
+        .withColumn("is_high_value", when(col("Amount_USD") > 500, 1).otherwise(0))\
+        .withColumn("is_fraud_flag", when(col("Is Fraud?") == "Yes", 1).otherwise(0))\
+        .withColumn("is_weekday", when(col("day_of_week").isin([2, 3, 4, 5, 6]), 1).otherwise(0))\
+        .withColumn("is_weekend", when(col("day_of_week").isin([1, 7]), 1).otherwise(0))
+
+    # Filter out transactions with errors AND fraud (YÊU CẦU CỦA THẦY)
+    # "Errors?" = technical errors that should be filtered out
+    # "Is Fraud? = Yes" = fraud transactions, NOT successful, do NOT process further
+    df_filtered = df_with_helpers.filter(
+        (((col("Errors?").isNull()) | (col("Errors?") == "")) &
+         ((col("Is Fraud?").isNull()) | (col("Is Fraud?") == "") | (col("Is Fraud?") == "No")))
     )
 
-    # Add watermark for deduplication (allow 24 hours late data to handle loop mode)
-    df_watermarked = df_filtered.withWatermark("transaction_datetime", "24 hours")
-
-    # Remove duplicates based on unique transaction key within watermark window
-    # A transaction is unique by: transaction_datetime + User + Card + Amount_USD
-    # Using dropDuplicatesWithinWatermark to maintain state efficiently
-    df_deduplicated = df_watermarked.dropDuplicates([
-        "transaction_datetime", "User", "Card", "Amount_USD"
-    ])
-
-    df_final = df_deduplicated.withColumn("processed_at", current_timestamp()).withColumn("processing_date", current_date())
+    # Deduplication is handled by Airflow tracking to avoid re-pushing on restart
+    df_final = df_filtered.withColumn("processed_at", current_timestamp()).withColumn("processing_date", current_date())
 
     df_output = df_final.select(
         "User",
@@ -227,6 +226,10 @@ def process_stream(spark: SparkSession):
         "MCC",
         "Is Fraud?",
         "transaction_type",
+        "is_high_value",
+        "is_fraud_flag",
+        "is_weekday",
+        "is_weekend",
         "processed_at",
         "processing_date",
     )

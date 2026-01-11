@@ -5,25 +5,94 @@
 
 ---
 
-## 📌 Danh sách 15 Fields có sẵn trong Power BI Dataset
+## ⚡ **QUAN TRỌNG: Hướng dẫn này KHÔNG CẦN DAX!**
+
+**✅ Ưu điểm:**
+- Sử dụng **CHỈ fields có sẵn** trong Streaming Dataset
+- Không cần tạo Calculated Columns/Measures phức tạp
+- Không cần Power BI Desktop, làm được trên **Power BI Service (Web)**
+- Dùng **Filters + Multiple Visuals** thay vì DAX
+
+**🎯 Approach:**
+- **Câu cần so sánh (Câu 4, 8, 9):** Tạo 2-3 visuals riêng với filters khác nhau
+- **Câu cần tính toán (tỷ lệ %):** Dùng Matrix hoặc Stacked Bar Chart (trực quan)
+- **Câu cần phân tích pattern:** Dùng Scatter Chart + Slicer
+
+**💡 Tất cả được làm trên Power BI Web, không cần sửa code Spark!**
+
+---
+
+## 📌 Danh sách 19 Fields có sẵn trong Power BI Dataset
 
 | Field Name | Type | Mô tả |
 |-----------|------|-------|
-| `transaction_datetime` | DateTime | Thời điểm giao dịch (dd/MM/yyyy HH:mm:ss) |
+| `transaction_datetime` | DateTime | Thời điểm giao dịch (yyyy-MM-dd HH:mm:ss) |
 | `Amount_USD` | Number | Giá trị giao dịch (USD) |
 | `Amount_VND` | Number | Giá trị giao dịch (VND) |
 | `Merchant_Name` | Text | Tên merchant |
 | `Merchant_City` | Text | Thành phố merchant |
 | `Merchant_State` | Text | Bang merchant |
-| `MCC` | Number | Merchant Category Code |
-| `Is_Fraud` | Text | "Yes" hoặc "No" |
+| `MCC` | Text | Merchant Category Code |
+| `Is_Fraud` | Text | "Yes" hoặc "" (rỗng = No) |
 | `transaction_type` | Text | FRAUD / HIGH_VALUE / MEDIUM_VALUE / LOW_VALUE |
 | `day_of_week` | Number | Thứ trong tuần (1=CN, 2=T2, ..., 7=T7) |
-| `transaction_year` | Number | Năm |
-| `transaction_month` | Number | Tháng |
+| `transaction_year` | Number | Năm (2003) |
+| `transaction_month` | Number | Tháng (1-12) |
 | `transaction_hour` | Number | Giờ (0-23) |
-| `User` | Number | User ID |
-| `Card` | Number | Card ID |
+| `User` | Text | User ID (luôn là "0") |
+| `Card` | Text | Card ID (luôn là "0") |
+| `is_high_value` | Number | 1 = Amount_USD > 500, 0 = ngược lại |
+| `is_fraud_flag` | Number | 1 = Is_Fraud = "Yes", 0 = ngược lại |
+| `is_weekday` | Number | 1 = T2-T6 (day_of_week 2-6), 0 = ngược lại |
+| `is_weekend` | Number | 1 = T7/CN (day_of_week 1,7), 0 = ngược lại |
+
+**⚠️ LƯU Ý Quan Trọng:**
+- `Is_Fraud`: "" (rỗng) = Không fraud, "Yes" = Có fraud
+- Dữ liệu từ năm **2003**, chỉ có **User 0** và **Card 0**
+- **4 helper columns mới** (is_high_value, is_fraud_flag, is_weekday, is_weekend) giúp lọc dễ dàng không cần DAX
+
+---
+
+## 💡 **Hướng Dẫn Sử Dụng 4 Helper Columns**
+
+### 1. `is_high_value` (Giao dịch giá trị lớn)
+**Cách dùng:**
+- **Filter:** `is_high_value = 1` → Chỉ hiển thị giao dịch > $500
+- **Aggregation:** `Sum of is_high_value` → Đếm số giao dịch giá trị lớn
+- **Ứng dụng:** Câu 6 (phân tích giao dịch lớn)
+
+### 2. `is_fraud_flag` (Giao dịch fraud)
+**Cách dùng:**
+- **Filter:** `is_fraud_flag = 1` → Chỉ hiển thị fraud
+- **Aggregation:** `Sum of is_fraud_flag` → Đếm số fraud
+- **Tính tỷ lệ:** `Sum of is_fraud_flag` / `Count of transaction_datetime` = Fraud Rate
+- **Ứng dụng:** Câu 4, 7, 9 (phân tích fraud)
+
+### 3. `is_weekday` (Ngày thường)
+**Cách dùng:**
+- **Filter:** `is_weekday = 1` → Chỉ hiển thị T2-T6
+- **Aggregation:** `Sum of is_weekday` hoặc Filter + Count
+- **Ứng dụng:** Câu 8 (so sánh ngày thường vs cuối tuần)
+
+### 4. `is_weekend` (Cuối tuần)
+**Cách dùng:**
+- **Filter:** `is_weekend = 1` → Chỉ hiển thị T7/CN
+- **Aggregation:** `Sum of is_weekend` hoặc Filter + Count
+- **Ứng dụng:** Câu 8 (so sánh ngày thường vs cuối tuần)
+
+**Ví dụ thực tế:**
+```
+Câu hỏi: Có bao nhiêu giao dịch fraud giá trị lớn vào cuối tuần?
+
+Bước 1: Tạo Card visual
+Bước 2: Add filters:
+  - is_fraud_flag = 1
+  - is_high_value = 1
+  - is_weekend = 1
+Bước 3: Fields = Count of transaction_datetime
+
+→ Kết quả: Số giao dịch fraud + giá trị lớn + cuối tuần (không cần DAX!)
+```
 
 ---
 
@@ -178,50 +247,68 @@
 - Tính **tỷ lệ fraud (%)** theo thành phố và merchant
 - Phát hiện outlier có tỷ lệ fraud cao bất thường
 
-### 📊 Visuals cần tạo:
+### 📊 Visuals cần tạo (KHÔNG CẦN DAX - Dùng 2 Tables riêng):
 
-#### Visual 1: Table - Tỷ lệ fraud theo thành phố
-**Visualization:** Table
-**Columns:**
-- `Merchant_City`
-- `Total Transactions` = `COUNT(transaction_datetime)`
-- `Fraud Transactions` = `CALCULATE(COUNT(transaction_datetime), Is_Fraud = "Yes")`
-- `Fraud Rate (%)` = `([Fraud Transactions] / [Total Transactions]) * 100`
+#### Cách 1: Dùng 2 Tables riêng biệt (ĐƠN GIẢN NHẤT)
 
-**Sort:** By Fraud Rate (%) descending
-**Filter:** Chỉ hiện thành phố có ≥ 20 giao dịch (để tránh nhiễu)
+**Table 1 - Tổng giao dịch theo thành phố:**
+- **Visualization:** Table
+- **Columns:**
+  - `Merchant_City`
+  - `Count of transaction_datetime` (tự động aggregation)
+- **Sort:** By Count descending
+- **Title:** "Tổng giao dịch theo thành phố"
 
-#### Visual 2: Bar Chart - Top 10 thành phố có fraud rate cao
-**Visualization:** Clustered Bar Chart
-**Axis (Y):** `Merchant_City`
-**Values (X):** `Fraud Rate (%)`
-**Filters:** Top 10, Total Transactions ≥ 20
-**Title:** "Top 10 thành phố có tỷ lệ fraud cao nhất"
+**Table 2 - Giao dịch fraud theo thành phố:**
+- **Visualization:** Table
+- **Columns:**
+  - `Merchant_City`
+  - `Count of transaction_datetime`
+- **Filters pane:**
+  - Add filter: `Is_Fraud`
+  - **Chọn:** `Yes`
+- **Sort:** By Count descending
+- **Title:** "Giao dịch fraud theo thành phố"
 
-#### Visual 3: Table - Tỷ lệ fraud theo merchant
-**Visualization:** Table
-**Columns:** (Tương tự như Visual 1 nhưng dùng `Merchant_Name`)
+**Cách phân tích:**
+- Đặt 2 tables cạnh nhau
+- So sánh số liệu giữa 2 tables
+- VD: Miami có 45 GD total, 12 GD fraud → Tỷ lệ ~26.7% (tính tay hoặc dùng calculator)
 
-### 💡 Cách tạo Calculated Measures trong Power BI:
+---
 
-```DAX
-// Measure 1: Total Transactions
-Total Transactions = COUNT(RealTimeData[transaction_datetime])
+#### Cách 2: Dùng Matrix với conditional formatting
 
-// Measure 2: Fraud Transactions
-Fraud Transactions = CALCULATE(
-    COUNT(RealTimeData[transaction_datetime]),
-    RealTimeData[Is_Fraud] = "Yes"
-)
+**Visual: Matrix**
+- **Rows:** `Merchant_City`
+- **Columns:** `Is_Fraud`
+- **Values:** `Count of transaction_datetime`
+- **Conditional formatting:** Highlight cells có giá trị cao
 
-// Measure 3: Fraud Rate
-Fraud Rate (%) =
-DIVIDE(
-    [Fraud Transactions],
-    [Total Transactions],
-    0
-) * 100
+**Cách đọc:**
 ```
+City         | No  | Yes | → Tỷ lệ fraud (%)
+-------------|-----|-----|------------------
+Miami        | 33  | 12  | → 12/(33+12) = 26.7%
+Las Vegas    | 29  | 9   | → 9/(29+9) = 23.7%
+Newark       | 41  | 11  | → 11/(41+11) = 21.2%
+```
+
+---
+
+#### Cách 3: Dùng Stacked Bar Chart (TRỰC QUAN NHẤT)
+
+**Visual: Stacked Bar Chart**
+- **Axis (Y):** `Merchant_City`
+- **Values (X):** `Count of transaction_datetime`
+- **Legend:** `Is_Fraud`
+- **Filters:** Top 10 cities by total transactions
+- **Title:** "Phân bố giao dịch fraud và non-fraud theo thành phố"
+
+**Cách đọc:**
+- Thanh màu đỏ (Fraud) dài → Thành phố có nhiều fraud
+- Tỷ lệ fraud = Chiều dài thanh đỏ / Tổng chiều dài thanh
+- Nhìn trực quan, không cần tính toán!
 
 ### ✅ Câu trả lời mẫu:
 
@@ -249,86 +336,79 @@ DIVIDE(
 
 ---
 
-## ❓ Câu 5: Người dùng nào có nhiều giao dịch liên tiếp trong thời gian ngắn?
+## ❓ Câu 5: Có giao dịch nào xảy ra liên tiếp trong thời gian ngắn? (Velocity Attack)
+
+**⚠️ LƯU Ý:** Dataset chỉ có **User 0** và **Card 0**, không thể phân tích theo từng user riêng lẻ.
 
 ### 🎯 Mục tiêu:
-- Tìm user có **tần suất giao dịch cao bất thường** (VD: >10 giao dịch trong 1 giờ)
-- Phát hiện hành vi **velocity attack** (tấn công liên tiếp)
+- Phát hiện **các giao dịch liên tiếp** trong thời gian ngắn (velocity pattern)
+- Tìm các **cụm giao dịch dày đặc** (nhiều GD trong 1 giờ)
 
 ### 📊 Visuals cần tạo:
 
-#### Visual 1: Table - Top users có nhiều giao dịch
-**Visualization:** Table
-**Columns:**
-- `User`
-- `Count of transaction_datetime` (Tổng giao dịch)
-- `Earliest Transaction` = `MIN(transaction_datetime)`
-- `Latest Transaction` = `MAX(transaction_datetime)`
-- `Time Span (hours)` = Tính khoảng thời gian
+#### Visual 1: Column Chart - Số giao dịch theo giờ và ngày
+**Visualization:** Clustered Column Chart
+**Axis (X):** `transaction_hour`
+**Values (Y):** `Count of transaction_datetime`
+**Legend:** `day_of_week`
+**Title:** "Phân bố số giao dịch theo giờ và ngày trong tuần"
 
-**Sort:** By Count descending
-**Filter:** Top 20
+**Cách phân tích:**
+- Tìm các **cột cao đột biến** = Nhiều giao dịch tập trung
+- VD: Nếu 14h có 500 GD trong khi trung bình chỉ 50 GD/giờ → Velocity attack
 
-#### Visual 2: Scatter Chart - Giao dịch theo thời gian
-**Visualization:** Scatter Chart
-**X Axis:** `transaction_datetime`
-**Y Axis:** `User`
-**Size:** `Amount_VND`
-**Legend:** `Is_Fraud`
-**Title:** "Timeline giao dịch của từng User"
+---
+
+#### Visual 2: Line Chart - Giao dịch theo thời gian
+**Visualization:** Line Chart
+**Axis (X):** `transaction_datetime`
+**Values (Y):** `Count of transaction_datetime`
+**Aggregation:** Bin by Hour (mỗi điểm = 1 giờ)
+**Title:** "Số lượng giao dịch theo thời gian (theo giờ)"
 
 **Cách đọc:**
-- Nếu thấy nhiều điểm tập trung dày đặc trong 1 khoảng thời gian ngắn → User đáng nghi
+- **Đỉnh cao đột ngột** = Velocity attack
+- **Đường ổn định** = Hành vi bình thường
 
-### 💡 Calculated Column để tính Time Span:
+---
 
-```DAX
-// Tạo Calculated Table trong Power BI
-User Activity Summary =
-SUMMARIZE(
-    RealTimeData,
-    RealTimeData[User],
-    "Total Transactions", COUNT(RealTimeData[transaction_datetime]),
-    "First Transaction", MIN(RealTimeData[transaction_datetime]),
-    "Last Transaction", MAX(RealTimeData[transaction_datetime]),
-    "Time Span (Hours)",
-        DATEDIFF(
-            MIN(RealTimeData[transaction_datetime]),
-            MAX(RealTimeData[transaction_datetime]),
-            HOUR
-        )
-)
+#### Visual 3: Table - Top khung giờ có nhiều giao dịch nhất
+**Visualization:** Table
+**Columns:**
+- `transaction_datetime` (format: "dd/MM/yyyy HH:00")
+- `Count of transaction_datetime`
+- `Sum of is_fraud_flag` (= số fraud trong khung giờ đó)
 
-// Thêm Calculated Column: Transaction Velocity
-Transaction Velocity =
-DIVIDE(
-    [Total Transactions],
-    [Time Span (Hours)] + 1,  // +1 để tránh chia cho 0
-    0
-)
-```
+**Sort:** By Count descending
+**Filters:** Top 20
+
+**Cách phân tích:**
+- Khung giờ nào có >100 GD/giờ = Bất thường
+- Tỷ lệ fraud trong khung giờ đó cao không?
 
 ### ✅ Câu trả lời mẫu:
 
-> **Top 5 User có nhiều giao dịch liên tiếp:**
+> **Phân tích Velocity Pattern:**
 >
-> | User ID | Tổng GD | Thời gian | Time Span | Velocity (GD/giờ) | Nhận xét |
-> |---------|---------|-----------|-----------|-------------------|----------|
-> | **User 1234** | 45 | 10:00-12:30 | 2.5h | **18 GD/giờ** | 🚨 Bất thường! TB: 2-3 GD/giờ |
-> | **User 5678** | 38 | 14:15-16:00 | 1.75h | **21.7 GD/giờ** | 🚨 Có thể bị đánh cắp thẻ |
-> | **User 9012** | 32 | 09:00-11:00 | 2h | **16 GD/giờ** | ⚠️ Cần kiểm tra |
-> | **User 3456** | 28 | 18:00-19:00 | 1h | **28 GD/giờ** | 🚨 Cực kỳ cao! |
-> | **User 7890** | 150 | 08:00-20:00 | 12h | 12.5 GD/giờ | ✅ Bình thường (cả ngày) |
+> **Top 5 khung giờ có nhiều giao dịch liên tiếp:**
 >
-> **Phát hiện velocity attack:**
-> - **User 3456:** 28 giao dịch trong 1 giờ (18:00-19:00)
->   - 15/28 giao dịch bị fraud (53.6%)
->   - Các giao dịch cách nhau ~2 phút → Nghi ngờ bot tự động
-> - **User 5678:** 38 giao dịch trong 1.75 giờ
->   - Tất cả ở cùng merchant "Online Electronics"
->   - Giá trị trung bình: $150 → Có thể test card stolen
+> | Ngày | Khung giờ | Số GD | Fraud | Tỷ lệ | Velocity (GD/giờ) | Nhận xét |
+> |------|-----------|-------|-------|-------|-------------------|----------|
+> | 05/01/2003 | 14:00-15:00 | 127 | 18 | 14.2% | **127 GD/giờ** | 🚨 Cực kỳ cao! |
+> | 04/01/2003 | 10:00-11:00 | 98 | 8 | 8.2% | **98 GD/giờ** | ⚠️ Bất thường |
+> | 05/01/2003 | 15:00-16:00 | 85 | 12 | 14.1% | **85 GD/giờ** | ⚠️ Velocity attack |
+> | 03/01/2003 | 18:00-19:00 | 76 | 6 | 7.9% | **76 GD/giờ** | ⚠️ Cao |
+> | 04/01/2003 | 11:00-12:00 | 68 | 4 | 5.9% | **68 GD/giờ** | ✅ Chấp nhận được |
 >
-> **Biểu đồ:** [Scatter Chart hiển thị các điểm giao dịch tập trung dày đặc]
+> **Phát hiện Pattern:**
+> - **Trung bình:** ~15-20 giao dịch/giờ
+> - **Ngưỡng bất thường:** >50 giao dịch/giờ
+> - **Khung giờ 14h-16h ngày 05/01:** Có 212 giao dịch liên tiếp trong 2 giờ
+>   - Tỷ lệ fraud: 14.2% (cao hơn trung bình 5.2%)
+>   - Merchant phổ biến: Online stores, Gas stations
+>   - → Nghi ngờ **bot tấn công tự động**
+>
+> **Biểu đồ:** [Line Chart hiển thị đỉnh cao bất thường trong timeline]
 
 ---
 
@@ -508,35 +588,95 @@ DIVIDE(
 ### 🎯 Mục tiêu:
 - So sánh **số lượng, giá trị, fraud rate** giữa weekday vs weekend
 
-### 📊 Visuals cần tạo:
+### 📊 Visuals cần tạo (KHÔNG CẦN DAX, CHỈ DÙNG FILTERS):
 
-#### Visual 1: Clustered Column Chart - So sánh weekday vs weekend
-**Visualization:** Clustered Column Chart
-**Axis (X):** `Day Type` (tạo calculated column: Weekday/Weekend)
-**Values (Y):**
-- `Count of transactions`
-- `Sum of Amount_VND`
-- `Fraud Rate (%)`
-**Title:** "So sánh giao dịch: Ngày thường vs Cuối tuần"
+#### Visual 1: Cards so sánh số lượng giao dịch
 
-#### Visual 2: Line Chart - Xu hướng theo ngày trong tuần
+**Card 1 - Ngày thường:**
+- **Visualization:** Card
+- **Fields:** `Count of transaction_datetime`
+- **Filters pane:**
+  - Add filter: `day_of_week`
+  - Filter type: Basic filtering
+  - **Chọn:** `2, 3, 4, 5, 6` (Thứ 2 đến Thứ 6)
+- **Title:** "Tổng giao dịch ngày thường (T2-T6)"
+
+**Card 2 - Cuối tuần:**
+- **Visualization:** Card
+- **Fields:** `Count of transaction_datetime`
+- **Filters pane:**
+  - Add filter: `day_of_week`
+  - **Chọn:** `1, 7` (Chủ nhật và Thứ 7)
+- **Title:** "Tổng giao dịch cuối tuần (T7-CN)"
+
+---
+
+#### Visual 2: Cards so sánh giá trị trung bình
+
+**Card 3 - Giá trị TB ngày thường:**
+- **Visualization:** Card
+- **Fields:** `Average of Amount_VND`
+- **Filter:** `day_of_week` = `2,3,4,5,6`
+- **Title:** "Giá trị TB ngày thường"
+
+**Card 4 - Giá trị TB cuối tuần:**
+- **Visualization:** Card
+- **Fields:** `Average of Amount_VND`
+- **Filter:** `day_of_week` = `1,7`
+- **Title:** "Giá trị TB cuối tuần"
+
+---
+
+#### Visual 3: Line Chart - Xu hướng theo ngày trong tuần
 **Visualization:** Line Chart
 **Axis (X):** `day_of_week`
 **Values (Y):**
-- `Count of transactions`
-- `Average Amount_VND`
-- `Fraud Rate (%)`
-**Title:** "Xu hướng giao dịch theo từng ngày trong tuần"
+- `Count of transaction_datetime`
+- `Average of Amount_VND`
+**Title:** "Xu hướng giao dịch theo từng ngày trong tuần (1=CN, 2=T2,...,7=T7)"
 
-### 💡 Calculated Column: Day Type
+**Cách đọc:**
+- Ngày 2-6: Đường line cao và ổn định (Weekday)
+- Ngày 1,7: Đường line thấp hơn (Weekend)
+- Rõ ràng thấy pattern không cần tạo calculated column!
 
-```DAX
-Day Type =
-IF(
-    RealTimeData[day_of_week] = 1 || RealTimeData[day_of_week] = 7,
-    "Weekend",
-    "Weekday"
-)
+---
+
+### 💡 Layout Report Page (KHÔNG CẦN DAX):
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Câu 8: So sánh ngày thường vs cuối tuần                │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  ┌──────────────────┐    ┌──────────────────┐          │
+│  │ NGÀY THƯỜNG      │    │ CUỐI TUẦN        │          │
+│  │ (Filter: 2-6)    │    │ (Filter: 1,7)    │          │
+│  ├──────────────────┤    ├──────────────────┤          │
+│  │   📊 6,850       │    │   📊 1,350       │          │
+│  │   giao dịch      │    │   giao dịch      │          │
+│  └──────────────────┘    └──────────────────┘          │
+│                                                          │
+│  ┌──────────────────┐    ┌──────────────────┐          │
+│  │ TB ngày thường   │    │ TB cuối tuần     │          │
+│  ├──────────────────┤    ├──────────────────┤          │
+│  │   💰 613K VND    │    │   💰 726K VND    │          │
+│  └──────────────────┘    └──────────────────┘          │
+│                                                          │
+│  ┌────────────────────────────────────────────────────┐ │
+│  │ Line Chart: Xu hướng theo day_of_week (1-7)       │ │
+│  │ - Rõ ràng thấy: Cao ở 2-6, Thấp ở 1,7             │ │
+│  └────────────────────────────────────────────────────┘ │
+│                                                          │
+└─────────────────────────────────────────────────────────┘
+```
+
+**⚠️ LƯU Ý:** Thêm **Text box** giải thích:
+```
+📌 Giải thích:
+- day_of_week = 1: Chủ nhật
+- day_of_week = 2-6: Thứ 2 đến Thứ 6 (Ngày thường)
+- day_of_week = 7: Thứ 7
 ```
 
 ### ✅ Câu trả lời mẫu:
@@ -580,144 +720,134 @@ IF(
 
 ---
 
-## ❓ Câu 9: Có người dùng nào bị nhiều lỗi hoặc bị gắn cờ fraud nhiều hơn mức trung bình?
+## ❓ Câu 9: Có merchant hoặc thời điểm nào bị fraud nhiều hơn mức trung bình?
+
+**⚠️ LƯU Ý:** Dataset chỉ có **User 0**, không thể phân tích theo từng user. Thay vào đó, phân tích theo **Merchant** và **thời điểm**.
 
 ### 🎯 Mục tiêu:
-- Tìm **users bị fraud nhiều lần** (victim hoặc fraudster)
-- Phân tích hành vi của các users này
+- Tìm **merchants bị fraud nhiều lần**
+- Tìm **khung giờ/ngày** có tỷ lệ fraud cao bất thường
 
 ### 📊 Visuals cần tạo:
 
-#### Visual 1: Table - Top users bị fraud
-**Visualization:** Table
-**Columns:**
-- `User`
-- `Total Transactions`
-- `Fraud Transactions`
-- `Fraud Rate (%)`
-- `Total Amount Lost (VND)`
+#### Visual 1: Matrix - Phân bố fraud theo Merchant
 
-**Sort:** By Fraud Transactions descending
-**Filter:** Fraud Transactions > 0
-
-#### Visual 2: Scatter Chart - Fraud rate vs Total transactions
-**Visualization:** Scatter Chart
-**X Axis:** `Total Transactions`
-**Y Axis:** `Fraud Rate (%)`
-**Details:** `User`
-**Size:** `Total Amount Lost`
-**Title:** "Phân tích users bị fraud"
+**Visualization:** Matrix
+**Rows:** `Merchant_Name`
+**Columns:** `Is_Fraud`
+**Values:** `Count of transaction_datetime`
+**Filters:** Top 20 merchants by total transactions
+**Title:** "Ma trận fraud theo Merchant"
 
 **Cách đọc:**
-- **Góc phải trên (nhiều GD, fraud rate cao):** Users bị tấn công liên tục hoặc là fraudster
-- **Góc trái trên (ít GD, fraud rate cao):** Users mới bị tấn công ngay
-
-#### Visual 3: Line Chart - Timeline fraud của top users
-**Visualization:** Line Chart
-**Axis (X):** `transaction_datetime`
-**Values (Y):** `Cumulative Fraud Count`
-**Legend:** `User` (chọn top 5 users)
-**Title:** "Timeline giao dịch fraud của top users"
-
-### 💡 Calculated Measures:
-
-```DAX
-// Measure: Fraud Transactions per User
-Fraud Transactions =
-CALCULATE(
-    COUNT(RealTimeData[transaction_datetime]),
-    RealTimeData[Is_Fraud] = "Yes"
-)
-
-// Measure: Total Amount Lost (VND)
-Total Amount Lost =
-CALCULATE(
-    SUM(RealTimeData[Amount_VND]),
-    RealTimeData[Is_Fraud] = "Yes"
-)
-
-// Measure: Average Fraud Rate
-Average Fraud Rate =
-AVERAGEX(
-    VALUES(RealTimeData[User]),
-    DIVIDE(
-        CALCULATE(COUNT(RealTimeData[transaction_datetime]), RealTimeData[Is_Fraud] = "Yes"),
-        CALCULATE(COUNT(RealTimeData[transaction_datetime])),
-        0
-    )
-) * 100
 ```
+Merchant         | (blank) | Yes | → Fraud Rate
+-----------------|---------|-----|-------------
+Gas Station XYZ  | 17      | 11  | → 11/(17+11) = 39.3% 🚨
+Online Electr... | 28      | 14  | → 33.3% 🚨
+Jewelry Store    | 26      | 9   | → 25.7% ⚠️
+Walmart          | 348     | 2   | → 0.6% ✅
+```
+
+---
+
+#### Visual 2: Stacked Bar Chart - Top Merchants bị fraud
+
+**Visualization:** 100% Stacked Bar Chart
+**Axis (Y):** `Merchant_Name`
+**Values (X):** `Count of transaction_datetime`
+**Legend:** `Is_Fraud`
+**Filters:** Top 15 merchants
+**Title:** "Tỷ lệ fraud của Top Merchants (%)"
+
+**Cách đọc:**
+- Thanh màu đỏ dài → Merchant có fraud rate cao
+- Nhìn trực quan, dễ so sánh!
+
+---
+
+#### Visual 3: Heatmap - Fraud rate theo giờ và ngày
+
+**Visualization:** Matrix
+**Rows:** `day_of_week`
+**Columns:** `transaction_hour`
+**Values:** `Sum of is_fraud_flag` (số fraud transactions)
+**Conditional Formatting:** Color scale (đỏ = nhiều, xanh = ít)
+**Title:** "Heatmap: Số giao dịch fraud theo giờ và thứ"
+
+**Cách đọc:**
+- Ô màu đỏ đậm = Nhiều fraud
+- Tìm "hot spots" = Khung giờ + ngày có fraud tập trung
+
+---
+
+#### Visual 4: Table - Top khung giờ có fraud cao
+
+**Visualization:** Table
+**Columns:**
+- `transaction_hour`
+- `day_of_week`
+- `Count of transaction_datetime` (tổng GD)
+- `Sum of is_fraud_flag` (số fraud)
+
+**Calculated Field trong Visual:** Fraud Rate = `Sum of is_fraud_flag` / `Count of transaction_datetime`
+
+**Sort:** By fraud count descending
+**Filters:** Chỉ hiển thị khung giờ có >10 fraud
+**Title:** "Khung giờ có nhiều fraud nhất"
 
 ### ✅ Câu trả lời mẫu:
 
 > **Mức trung bình toàn hệ thống:**
+> - **Tổng giao dịch:** 19,389
+> - **Tổng fraud:** 1,008 (giả sử)
 > - **Fraud rate TB:** 5.2%
-> - **Số fraud TB/user:** 2.3 giao dịch
-> - **Amount lost TB/user:** 1,850,000 VND
 >
 > ---
 >
-> **Top 10 Users bị fraud NHIỀU NHẤT:**
+> **Top 10 Merchants bị fraud NHIỀU NHẤT:**
 >
-> | User ID | Tổng GD | Fraud GD | Fraud Rate | Tổng mất (VND) | Phân tích |
-> |---------|---------|----------|------------|----------------|-----------|
-> | **User 1234** | 45 | **18** | 40% | 15.2M | 🚨 Thẻ bị đánh cắp! |
-> | **User 5678** | 38 | **15** | 39.5% | 12.8M | 🚨 Victim hoặc fraudster |
-> | **User 9012** | 52 | **14** | 26.9% | 18.5M | ⚠️ Cần khóa card ngay |
-> | **User 3456** | 28 | **12** | 42.9% | 9.2M | 🚨 Cao nhất! |
-> | **User 7890** | 67 | **11** | 16.4% | 22.1M | ⚠️ Nhiều GD lớn bị fraud |
-> | **User 2345** | 32 | **10** | 31.3% | 8.5M | 🚨 |
-> | **User 6789** | 41 | **9** | 22% | 11.3M | ⚠️ |
-> | **User 0123** | 25 | **8** | 32% | 6.8M | 🚨 |
-> | **User 4567** | 58 | **8** | 13.8% | 14.2M | ✅ Acceptable |
-> | **User 8901** | 33 | **7** | 21.2% | 7.9M | ⚠️ |
+> | Merchant | Tổng GD | Fraud GD | Fraud Rate | Tổng mất (VND) | Phân tích |
+> |----------|---------|----------|------------|----------------|-----------|
+> | **Gas Station XYZ** | 28 | **11** | 39.3% | 8.5M | 🚨 Cực kỳ cao! Block ngay |
+> | **Online Electronics** | 42 | **14** | 33.3% | 12.2M | 🚨 Merchant online dễ bị tấn công |
+> | **Jewelry Store ABC** | 35 | **9** | 25.7% | 18.5M | ⚠️ Hàng giá trị cao |
+> | **Gas Station DEF** | 31 | **8** | 25.8% | 7.1M | ⚠️ Gas station thứ 2 |
+> | **Pawn Shop** | 22 | **6** | 27.3% | 5.8M | ⚠️ High-risk category |
+> | **Fast Food Chain** | 158 | **8** | 5.1% | 2.2M | ✅ Chấp nhận được |
+> | **Walmart** | 350 | **2** | 0.6% | 1.5M | ✅ Rất thấp |
 >
 > ---
 >
-> **Phân tích chi tiết:**
+> **Top khung giờ có fraud cao:**
 >
-> **User 1234 (40% fraud rate):**
-> - 45 giao dịch, 18 bị fraud
-> - **Pattern:**
->   - 15/18 fraud xảy ra trong 2 ngày (04/01 - 05/01)
->   - Tất cả ở thành phố KHÁC với lịch sử (Miami vs thường ở New York)
->   - Giá trị: $150-$250 (dưới ngưỡng cảnh báo $500)
->   - Merchant: Gas stations, Electronics
-> - **Kết luận:** Thẻ bị đánh cắp, fraudster test card với giao dịch nhỏ
->
-> **User 3456 (42.9% fraud rate - CAO NHẤT):**
-> - 28 giao dịch, 12 bị fraud
-> - **Pattern:**
->   - 12 fraud xảy ra trong **1 giờ** (18:00-19:00)
->   - Cùng merchant: "Online Electronics"
->   - Giá trị giống nhau: $149.99
-> - **Kết luận:** Bot tự động test card stolen, cần block ngay
->
-> **User 7890 (nhiều amount lost nhất: 22.1M VND):**
-> - 67 giao dịch, 11 bị fraud
-> - Fraud rate: 16.4% (không cao lắm)
-> - NHƯNG: Các giao dịch fraud có giá trị rất lớn ($800-$2,500)
-> - **Kết luận:** High-value victim, cần tăng giới hạn cảnh báo
+> | Giờ | Thứ | Tổng GD | Fraud | Fraud Rate | Nhận xét |
+> |-----|-----|---------|-------|------------|----------|
+> | **3h** | Chủ nhật | 45 | 12 | **26.7%** | 🚨 Đêm khuya + Cuối tuần |
+> | **2h** | Thứ 7 | 38 | 9 | **23.7%** | 🚨 Late night attack |
+> | **4h** | Chủ nhật | 32 | 7 | **21.9%** | ⚠️ Sáng sớm |
+> | **14h** | Thứ 3 | 127 | 18 | **14.2%** | ⚠️ Velocity attack (nhiều GD) |
+> | **10h** | Thứ 5 | 98 | 4 | 4.1% | ✅ Giờ hành chính |
 >
 > ---
 >
-> **Users bị fraud ĐẦU TIÊN (new victim):**
+> **Phân tích Heatmap:**
 >
-> | User ID | Tổng GD | Fraud GD | First Fraud Time | Nhận xét |
-> |---------|---------|----------|------------------|----------|
-> | User AAA | 5 | 4 | 05/01 02:30 | 🚨 80% fraud ngay từ đầu → Card stolen before first use |
-> | User BBB | 8 | 5 | 04/01 23:15 | 🚨 62.5% fraud → Compromised từ đầu |
-> | User CCC | 12 | 7 | 05/01 03:00 | ⚠️ 58% fraud, giờ đêm khuya |
+> **Hot spots (ô màu đỏ đậm):**
+> - **Chủ nhật 2h-5h:** 28 fraud transactions (cao nhất)
+> - **Thứ 7 23h-01h:** 22 fraud transactions
+> - **Thứ 3 14h:** 18 fraud transactions (velocity attack)
 >
-> ---
+> **Safe zones (ô màu xanh):**
+> - **Thứ 2-5, 10h-14h:** <3% fraud rate
+> - **Thứ 6 9h-12h:** <2% fraud rate
 >
-> **Scatter Chart insights:**
-> - **Quadrant 1 (phải trên):** 8 users có >10 GD và fraud rate >20% → Ưu tiên review
-> - **Quadrant 2 (trái trên):** 5 users có <10 GD nhưng fraud rate >50% → Card stolen ngay từ đầu
-> - **Quadrant 3 (trái dưới):** Hầu hết users bình thường
-> - **Quadrant 4 (phải dưới):** Users có nhiều GD nhưng fraud thấp → Trusted users
+> **Kết luận:**
+> - ⚠️ Gas stations và Online merchants là mục tiêu chính
+> - 🚨 Đêm khuya cuối tuần (T7/CN 2h-5h) rất nguy hiểm
+> - ✅ Giờ hành chính (10h-14h) tương đối an toàn
 >
-> **Biểu đồ:** [Table + Scatter Chart + Line Chart timeline]
+> **Biểu đồ:** [Matrix Heatmap + Stacked Bar Chart]
 
 ---
 
