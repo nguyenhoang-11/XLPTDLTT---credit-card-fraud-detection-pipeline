@@ -160,34 +160,12 @@ class ExchangeRateScraper:
         return {"buy": 24000.0, "transfer": 24000.0, "sell": 24000.0}
 
 
-def test_scraper():
-    """Manual test for the exchange rate scraper."""
+if __name__ == "__main__":
+    # Manual test for the exchange rate scraper
     scraper = ExchangeRateScraper()
-
-    all_rates = scraper.get_exchange_rate()
-    if all_rates:
-        print("\n" + "=" * 60)
-        print("VIETCOMBANK EXCHANGE RATES")
-        print("=" * 60)
-        print(f"Source: {all_rates['source']}")
-        print(f"Timestamp: {all_rates['timestamp']}")
-        print("-" * 60)
-
-        for code, rate in list(all_rates["currencies"].items())[:5]:
-            print(
-                f"{code:6} | Buy: {rate['buy']:>10,.0f} | "
-                f"Transfer: {rate['transfer']:>10,.0f} | "
-                f"Sell: {rate['sell']:>10,.0f}"
-            )
-        print("=" * 60)
-
     usd_rate = scraper.get_usd_rate()
     if usd_rate:
         print("\nUSD/VND rate:")
         print(f"  Buy: {usd_rate['buy']:,.0f} VND")
         print(f"  Transfer: {usd_rate['transfer']:,.0f} VND")
         print(f"  Sell: {usd_rate['sell']:,.0f} VND")
-
-
-if __name__ == "__main__":
-    test_scraper()

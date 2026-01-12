@@ -118,6 +118,24 @@ def get_exchange_rate_udf():
     return udf(fetch_rate, DoubleType())
 
 
+def get_exchange_rate_broadcast(spark: SparkSession) -> float:
+    """Fetch USD/VND rate once and return as broadcast value.
+    
+    This is more efficient than UDF which would call API for every partition.
+    """
+    try:
+        scraper = ExchangeRateScraper()
+        usd_rate = scraper.get_usd_rate()
+        if usd_rate and usd_rate.get("transfer"):
+            rate = float(usd_rate["transfer"])
+            print(f"Fetched exchange rate: 1 USD = {rate:,.0f} VND")
+            return rate
+    except Exception as exc:  # pragma: no cover - external dependency
+        print(f"Exchange rate lookup failed: {exc}")
+    
+    return 24000.0
+
+
 def process_stream(spark: SparkSession):
     """Consume the Kafka stream, enrich, and write to multiple sinks."""
 
@@ -152,8 +170,9 @@ def process_stream(spark: SparkSession):
 
     df_cleaned = df_parsed.withColumn("Amount_USD", regexp_replace(col("Amount"), "\\$", "").cast("double"))
 
-    get_rate = get_exchange_rate_udf()
-    df_with_rate = df_cleaned.withColumn("exchange_rate", get_rate())
+    # Fetch exchange rate once at startup (broadcast to all executors)
+    exchange_rate = get_exchange_rate_broadcast(spark)
+    df_with_rate = df_cleaned.withColumn("exchange_rate", lit(exchange_rate))
     df_with_rate = df_with_rate.withColumn("Amount_VND", col("Amount_USD") * col("exchange_rate"))
 
     df_with_date = df_with_rate.withColumn(
@@ -206,23 +225,17 @@ def process_stream(spark: SparkSession):
     df_output = df_final.select(
         "User",
         "Card",
-        "transaction_date",
-        "transaction_time",
         "transaction_datetime",
         "transaction_year",
         "transaction_month",
         "transaction_day",
         "transaction_hour",
         "day_of_week",
-        "Amount",
         "Amount_USD",
         "Amount_VND",
-        "exchange_rate",
-        "Use Chip",
         "Merchant Name",
         "Merchant City",
         "Merchant State",
-        "Zip",
         "MCC",
         "Is Fraud?",
         "transaction_type",
@@ -231,7 +244,6 @@ def process_stream(spark: SparkSession):
         "is_weekday",
         "is_weekend",
         "processed_at",
-        "processing_date",
     )
 
     # Create local directories only when not using HDFS
@@ -256,41 +268,14 @@ def process_stream(spark: SparkSession):
         .start()
     )
 
-    query_console = (
-        df_output.writeStream.outputMode("append")
-        .format("console")
-        .option("truncate", "false")
-        .trigger(processingTime="30 seconds")
-        .start()
-    )
-
-    df_user_stats = df_output.groupBy(window(col("processed_at"), "1 minute"), col("User")).agg(
-        count("*").alias("transaction_count"),
-        sum("Amount_VND").alias("total_amount_vnd"),
-        avg("Amount_VND").alias("avg_amount_vnd"),
-        sum(when(col("Is Fraud?") == "Yes", 1).otherwise(0)).alias("fraud_count"),
-    )
-
-    query_stats = (
-        df_user_stats.writeStream.outputMode("complete")
-        .format("console")
-        .option("truncate", "false")
-        .trigger(processingTime="1 minute")
-        .queryName("user_statistics")
-        .start()
-    )
-
     print("\nStreaming queries started:")
-    print("  - Transactions (CSV)")
-    print("  - Console monitoring")
-    print("  - User statistics")
+    print("  - Transactions (CSV to HDFS/Local)")
     print("\nProcessing stream... Press Ctrl+C to stop.")
 
     spark.streams.awaitAnyTermination()
 
-    for query in [query_transactions, query_console, query_stats]:
-        if query.isActive:
-            query.stop()
+    if query_transactions.isActive:
+        query_transactions.stop()
 
 
 def main():
